@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 import '../models/latihan.dart';
 import '../services/latihan_storage.dart';
+import 'form_latihan_page.dart';
 
 // Halaman utama untuk menampilkan daftar riwayat latihan gym
 class DaftarLatihanPage extends StatefulWidget {
@@ -30,39 +31,7 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
     });
 
     try {
-      List<Latihan> data = await _storage.loadLatihan();
-
-      // // TODO hapus dummy: Menambahkan 3 data latihan contoh jika penyimpanan masih kosong
-      if (data.isEmpty) {
-        data = [
-          Latihan(
-            id: 'dummy-1',
-            namaLatihan: 'Bench Press',
-            beban: 60.0,
-            jumlahSet: 4,
-            jumlahRepetisi: 10,
-            tanggal: DateTime.now(),
-          ),
-          Latihan(
-            id: 'dummy-2',
-            namaLatihan: 'Squat',
-            beban: 80.0,
-            jumlahSet: 3,
-            jumlahRepetisi: 8,
-            tanggal: DateTime.now().subtract(const Duration(days: 1)),
-          ),
-          Latihan(
-            id: 'dummy-3',
-            namaLatihan: 'Deadlift',
-            beban: 100.0,
-            jumlahSet: 3,
-            jumlahRepetisi: 5,
-            tanggal: DateTime.now().subtract(const Duration(days: 2)),
-          ),
-        ];
-        // Simpan data dummy ke storage
-        await _storage.saveLatihan(data);
-      }
+      final List<Latihan> data = await _storage.loadLatihan();
 
       // Mengurutkan latihan dari tanggal terbaru
       data.sort((a, b) => b.tanggal.compareTo(a.tanggal));
@@ -76,6 +45,35 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
         _errorMessage = 'Gagal memuat data latihan';
         _isLoading = false;
       });
+    }
+  }
+
+  // Membuka form tambah latihan lewat Navigator.push
+  Future<void> _bukaFormTambah() async {
+    final Latihan? hasil = await Navigator.push<Latihan>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const FormLatihanPage(),
+      ),
+    );
+
+    // Jika pengguna menyimpan data, tambahkan ke list dan simpan ke SharedPreferences
+    if (hasil != null) {
+      setState(() {
+        _daftarLatihan.add(hasil);
+        _daftarLatihan.sort((a, b) => b.tanggal.compareTo(a.tanggal));
+      });
+
+      await _storage.saveLatihan(_daftarLatihan);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Latihan berhasil ditambahkan'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     }
   }
 
@@ -134,15 +132,7 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
       ),
       body: _buildBody(),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // // TODO: Placeholder untuk navigasi form tambah latihan di tahap selanjutnya
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Form tambah latihan akan dibuat di tahap berikutnya'),
-              duration: Duration(seconds: 1),
-            ),
-          );
-        },
+        onPressed: _bukaFormTambah,
         tooltip: 'Tambah Latihan',
         child: const Icon(Icons.add),
       ),
