@@ -1,5 +1,5 @@
 import 'package:material_ui/material_ui.dart';
-import 'screens/daftar_latihan_page.dart';
+import 'screens/main_shell.dart';
 import 'theme/app_theme.dart';
 
 void main() {
@@ -15,7 +15,7 @@ class MyApp extends StatelessWidget {
       title: 'Pencatat Latihan Gym',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
-      home: const DaftarLatihanPage(),
+      home: const MainShell(),
     );
   }
 }

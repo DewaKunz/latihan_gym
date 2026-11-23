@@ -122,6 +122,31 @@ class AppTheme {
         ),
         behavior: SnackBarBehavior.floating,
       ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: surface,
+        elevation: 0,
+        indicatorColor: primary.withValues(alpha: 0.2),
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: primary,
+            );
+          }
+          return const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: textSecondary,
+          );
+        }),
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const IconThemeData(color: primary);
+          }
+          return const IconThemeData(color: textSecondary);
+        }),
+      ),
     );
   }
 }
