@@ -1,10 +1,8 @@
 import 'package:material_ui/material_ui.dart';
 import '../models/latihan.dart';
 
-// Halaman form untuk menambah latihan baru atau mengubah latihan yang sudah ada
+// Halaman form untuk menambah atau mengubah data latihan dengan tema gelap modern
 class FormLatihanPage extends StatefulWidget {
-  // Jika parameter latihan diisi, halaman berada dalam mode ubah (edit)
-  // Jika null, halaman berada dalam mode tambah
   final Latihan? latihan;
 
   const FormLatihanPage({super.key, this.latihan});
@@ -124,8 +122,9 @@ class _FormLatihanPageState extends State<FormLatihanPage> {
         title: Text(isEditMode ? 'Ubah Latihan' : 'Tambah Latihan'),
         centerTitle: true,
       ),
+      // SingleChildScrollView mencegah overflow saat keyboard virtual muncul
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 24.0),
         child: Form(
           key: _formKey,
           child: Column(
@@ -135,10 +134,10 @@ class _FormLatihanPageState extends State<FormLatihanPage> {
               TextFormField(
                 controller: _namaController,
                 textCapitalization: TextCapitalization.words,
+                style: const TextStyle(color: Colors.white),
                 decoration: const InputDecoration(
                   labelText: 'Nama Latihan *',
-                  hintText: 'Misal: Bench Press, Squat',
-                  border: OutlineInputBorder(),
+                  hintText: 'Misal: Bench Press, Barbell Squat',
                   prefixIcon: Icon(Icons.fitness_center),
                 ),
                 validator: (value) {
@@ -148,18 +147,18 @@ class _FormLatihanPageState extends State<FormLatihanPage> {
                   return null;
                 },
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
 
               // Field Beban (kg)
               TextFormField(
                 controller: _bebanController,
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
+                style: const TextStyle(color: Colors.white),
                 decoration: const InputDecoration(
                   labelText: 'Beban (kg) *',
                   hintText: 'Contoh: 50 atau 52.5',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.scale),
+                  prefixIcon: Icon(Icons.scale_outlined),
                 ),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
@@ -176,16 +175,16 @@ class _FormLatihanPageState extends State<FormLatihanPage> {
                   return null;
                 },
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
 
               // Field Jumlah Set
               TextFormField(
                 controller: _setController,
                 keyboardType: TextInputType.number,
+                style: const TextStyle(color: Colors.white),
                 decoration: const InputDecoration(
                   labelText: 'Jumlah Set *',
-                  hintText: 'Contoh: 3',
-                  border: OutlineInputBorder(),
+                  hintText: 'Contoh: 3 atau 4',
                   prefixIcon: Icon(Icons.repeat),
                 ),
                 validator: (value) {
@@ -202,16 +201,16 @@ class _FormLatihanPageState extends State<FormLatihanPage> {
                   return null;
                 },
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
 
               // Field Jumlah Repetisi
               TextFormField(
                 controller: _repetisiController,
                 keyboardType: TextInputType.number,
+                style: const TextStyle(color: Colors.white),
                 decoration: const InputDecoration(
                   labelText: 'Jumlah Repetisi *',
-                  hintText: 'Contoh: 10',
-                  border: OutlineInputBorder(),
+                  hintText: 'Contoh: 8, 10, atau 12',
                   prefixIcon: Icon(Icons.numbers),
                 ),
                 validator: (value) {
@@ -228,34 +227,29 @@ class _FormLatihanPageState extends State<FormLatihanPage> {
                   return null;
                 },
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
 
               // Field Tanggal (readonly, dipilih lewat showDatePicker)
               TextFormField(
                 controller: _tanggalController,
                 readOnly: true,
+                style: const TextStyle(color: Colors.white),
                 onTap: () => _pilihTanggal(context),
                 decoration: const InputDecoration(
                   labelText: 'Tanggal Latihan *',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.calendar_today),
+                  prefixIcon: Icon(Icons.calendar_today_outlined),
+                  suffixIcon: Icon(Icons.arrow_drop_down),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 32),
 
               // Tombol Simpan
               ElevatedButton.icon(
                 onPressed: _simpan,
-                icon: const Icon(Icons.save),
+                icon: const Icon(Icons.check_circle_outline),
                 label: Text(
                   isEditMode ? 'Simpan Perubahan' : 'Simpan Latihan',
                   style: const TextStyle(fontSize: 16),
-                ),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
                 ),
               ),
             ],

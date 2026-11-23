@@ -1,10 +1,11 @@
 import 'package:material_ui/material_ui.dart';
 import '../models/latihan.dart';
 import '../services/latihan_storage.dart';
+import '../theme/app_theme.dart';
 import 'detail_latihan_page.dart';
 import 'form_latihan_page.dart';
 
-// Halaman utama untuk menampilkan daftar riwayat latihan gym
+// Halaman utama untuk menampilkan daftar riwayat latihan gym dengan tema modern
 class DaftarLatihanPage extends StatefulWidget {
   const DaftarLatihanPage({super.key});
 
@@ -218,6 +219,33 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
     return beban.toString();
   }
 
+  // Widget chip kecil untuk informasi beban, set x repetisi, dan tanggal
+  Widget _buildMiniChip({required IconData icon, required String label}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceLight,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.border, width: 0.8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: AppTheme.primary),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: AppTheme.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -230,6 +258,7 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
               _filterTanggal != null
                   ? Icons.filter_alt
                   : Icons.filter_alt_outlined,
+              color: _filterTanggal != null ? AppTheme.primary : null,
             ),
             tooltip: 'Filter Tanggal',
             onPressed: _pilihFilterTanggal,
@@ -240,7 +269,7 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
       floatingActionButton: FloatingActionButton(
         onPressed: _bukaFormTambah,
         tooltip: 'Tambah Latihan',
-        child: const Icon(Icons.add),
+        child: const Icon(Icons.add, size: 28),
       ),
     );
   }
@@ -248,7 +277,7 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
   Widget _buildBody() {
     if (_isLoading) {
       return const Center(
-        child: CircularProgressIndicator(),
+        child: CircularProgressIndicator(color: AppTheme.primary),
       );
     }
 
@@ -257,8 +286,11 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
-            const SizedBox(height: 8),
+            Text(
+              _errorMessage!,
+              style: const TextStyle(color: AppTheme.danger, fontSize: 16),
+            ),
+            const SizedBox(height: 12),
             ElevatedButton(
               onPressed: _muatData,
               child: const Text('Coba Lagi'),
@@ -268,15 +300,43 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
       );
     }
 
-    // Jika data penyimpanan sama sekali belum ada
+    // Tampilan kosong jika data penyimpanan belum ada
     if (_daftarLatihan.isEmpty) {
-      return const Center(
-        child: Text(
-          'Belum ada data',
-          style: TextStyle(
-            fontSize: 16,
-            color: Colors.grey,
-          ),
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(22),
+              decoration: BoxDecoration(
+                color: AppTheme.surface,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppTheme.border, width: 1.5),
+              ),
+              child: const Icon(
+                Icons.fitness_center,
+                size: 52,
+                color: AppTheme.primary,
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Belum ada data',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Tekan tombol + di bawah untuk mencatat latihan baru',
+              style: TextStyle(
+                fontSize: 14,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -286,17 +346,48 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Indikator filter aktif (Chip dengan tombol hapus filter)
+        // Indikator filter tanggal aktif ditampilkan rapi di atas daftar
         if (_filterTanggal != null)
           Padding(
-            padding: const EdgeInsets.only(
-                left: 16.0, right: 16.0, top: 12.0, bottom: 4.0),
-            child: Chip(
-              avatar: const Icon(Icons.calendar_today, size: 16),
-              label: Text('Tanggal: ${_formatTanggal(_filterTanggal!)}'),
-              onDeleted: _hapusFilter,
-              deleteIcon: const Icon(Icons.close, size: 18),
-              deleteButtonTooltipMessage: 'Hapus filter',
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppTheme.surface,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: AppTheme.primary.withValues(alpha: 0.6),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.filter_alt, size: 15, color: AppTheme.primary),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Tanggal: ${_formatTanggal(_filterTanggal!)}',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: _hapusFilter,
+                    borderRadius: BorderRadius.circular(12),
+                    child: const Padding(
+                      padding: EdgeInsets.all(2.0),
+                      child: Icon(
+                        Icons.close,
+                        size: 16,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
 
@@ -310,21 +401,25 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
                       Icon(
                         Icons.event_busy,
                         size: 56,
-                        color: Colors.grey.shade400,
+                        color: AppTheme.textSecondary.withValues(alpha: 0.5),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 14),
                       const Text(
                         'Tidak ada latihan pada tanggal ini',
                         style: TextStyle(
                           fontSize: 16,
-                          color: Colors.grey,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textSecondary,
                         ),
                       ),
                       const SizedBox(height: 12),
                       TextButton.icon(
                         onPressed: _hapusFilter,
-                        icon: const Icon(Icons.clear),
-                        label: const Text('Tampilkan Semua Latihan'),
+                        icon: const Icon(Icons.clear, color: AppTheme.primary),
+                        label: const Text(
+                          'Tampilkan Semua Latihan',
+                          style: TextStyle(color: AppTheme.primary),
+                        ),
                       ),
                     ],
                   ),
@@ -336,23 +431,20 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
                     final latihan = items[index];
                     return Card(
                       margin: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 6),
-                      elevation: 2,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                        horizontal: 16,
+                        vertical: 7,
                       ),
                       child: InkWell(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(16),
                         onTap: () => _bukaDetail(latihan),
                         child: Padding(
                           padding: const EdgeInsets.all(16.0),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Baris atas: nama latihan dan tanggal (dd/mm/yyyy)
+                              // Baris Atas: Nama Latihan (kiri) & Volume Menonjol (kanan)
                               Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Expanded(
                                     child: Text(
@@ -360,42 +452,74 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
                                       style: const TextStyle(
                                         fontSize: 18,
                                         fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                        letterSpacing: 0.2,
                                       ),
                                     ),
                                   ),
-                                  Text(
-                                    _formatTanggal(latihan.tanggal),
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.grey.shade600,
-                                    ),
+                                  const SizedBox(width: 12),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      const Text(
+                                        'VOLUME',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: 0.8,
+                                          color: AppTheme.primary,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.baseline,
+                                        textBaseline: TextBaseline.alphabetic,
+                                        children: [
+                                          Text(
+                                            _formatVolume(latihan.volume),
+                                            style: const TextStyle(
+                                              fontSize: 20,
+                                              fontWeight: FontWeight.w800,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 3),
+                                          const Text(
+                                            'kg',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppTheme.textSecondary,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 8),
-                              // Informasi beban dan set x repetisi
-                              Row(
+                              const SizedBox(height: 14),
+                              // Baris Bawah: Chip kecil untuk beban, set x repetisi, dan tanggal
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
                                 children: [
-                                  Text(
-                                    'Beban: ${_formatBeban(latihan.beban)} kg',
-                                    style: const TextStyle(fontSize: 14),
+                                  _buildMiniChip(
+                                    icon: Icons.scale_outlined,
+                                    label: '${_formatBeban(latihan.beban)} kg',
                                   ),
-                                  const SizedBox(width: 16),
-                                  Text(
-                                    '${latihan.jumlahSet} set x ${latihan.jumlahRepetisi} reps',
-                                    style: const TextStyle(fontSize: 14),
+                                  _buildMiniChip(
+                                    icon: Icons.repeat,
+                                    label:
+                                        '${latihan.jumlahSet} set x ${latihan.jumlahRepetisi} reps',
+                                  ),
+                                  _buildMiniChip(
+                                    icon: Icons.calendar_today_outlined,
+                                    label: _formatTanggal(latihan.tanggal),
                                   ),
                                 ],
-                              ),
-                              const SizedBox(height: 8),
-                              // Informasi volume latihan (beban x set x repetisi)
-                              Text(
-                                'Volume: ${_formatVolume(latihan.volume)} kg',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.blue.shade800,
-                                ),
                               ),
                             ],
                           ),
