@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 import '../models/latihan.dart';
 import '../services/latihan_storage.dart';
+import 'detail_latihan_page.dart';
 import 'form_latihan_page.dart';
 
 // Halaman utama untuk menampilkan daftar riwayat latihan gym
@@ -73,6 +74,59 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
             duration: Duration(seconds: 2),
           ),
         );
+      }
+    }
+  }
+
+  // Membuka halaman detail latihan lewat Navigator.push
+  Future<void> _bukaDetail(Latihan latihan) async {
+    final Map<String, dynamic>? hasil =
+        await Navigator.push<Map<String, dynamic>>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => DetailLatihanPage(latihan: latihan),
+      ),
+    );
+
+    // Tangani aksi dari halaman detail (ubah atau hapus)
+    if (hasil != null) {
+      final aksi = hasil['aksi'] as String?;
+
+      if (aksi == 'hapus') {
+        final String id = hasil['id'] as String;
+        setState(() {
+          _daftarLatihan.removeWhere((item) => item.id == id);
+        });
+        await _storage.saveLatihan(_daftarLatihan);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Latihan berhasil dihapus'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } else if (aksi == 'ubah') {
+        final Latihan latihanBaru = hasil['latihan'] as Latihan;
+        setState(() {
+          final index =
+              _daftarLatihan.indexWhere((item) => item.id == latihanBaru.id);
+          if (index != -1) {
+            _daftarLatihan[index] = latihanBaru;
+          }
+          _daftarLatihan.sort((a, b) => b.tanggal.compareTo(a.tanggal));
+        });
+        await _storage.saveLatihan(_daftarLatihan);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Perubahan latihan berhasil disimpan'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
       }
     }
   }
@@ -185,59 +239,63 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Baris atas: nama latihan dan tanggal (dd/mm/yyyy)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        latihan.namaLatihan,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: () => _bukaDetail(latihan),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Baris atas: nama latihan dan tanggal (dd/mm/yyyy)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          latihan.namaLatihan,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                    ),
-                    Text(
-                      _formatTanggal(latihan.tanggal),
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey.shade600,
+                      Text(
+                        _formatTanggal(latihan.tanggal),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade600,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                // Informasi beban dan set x repetisi
-                Row(
-                  children: [
-                    Text(
-                      'Beban: ${_formatBeban(latihan.beban)} kg',
-                      style: const TextStyle(fontSize: 14),
-                    ),
-                    const SizedBox(width: 16),
-                    Text(
-                      '${latihan.jumlahSet} set x ${latihan.jumlahRepetisi} reps',
-                      style: const TextStyle(fontSize: 14),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                // Informasi volume latihan (beban x set x repetisi)
-                Text(
-                  'Volume: ${_formatVolume(latihan.volume)} kg',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.blue.shade800,
+                    ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 8),
+                  // Informasi beban dan set x repetisi
+                  Row(
+                    children: [
+                      Text(
+                        'Beban: ${_formatBeban(latihan.beban)} kg',
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                      const SizedBox(width: 16),
+                      Text(
+                        '${latihan.jumlahSet} set x ${latihan.jumlahRepetisi} reps',
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // Informasi volume latihan (beban x set x repetisi)
+                  Text(
+                    'Volume: ${_formatVolume(latihan.volume)} kg',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.blue.shade800,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );
