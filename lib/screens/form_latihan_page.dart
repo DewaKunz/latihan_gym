@@ -56,19 +56,24 @@ class _FormLatihanPageState extends State<FormLatihanPage> {
       _catatanController = TextEditingController(text: latihan.catatan);
       _selectedTanggal = latihan.tanggal;
     } else if (awal != null) {
-      // Inisialisasi data untuk mode duplikat (mengisi nilai latihan awal, tanggal hari ini)
+      // Inisialisasi data untuk mode duplikat atau mode tambah dari panduan
       _namaController = TextEditingController(text: awal.namaLatihan);
       _bebanController = TextEditingController(
-        text: awal.beban % 1 == 0
-            ? awal.beban.toInt().toString()
-            : awal.beban.toString(),
+        text: awal.beban > 0
+            ? (awal.beban % 1 == 0
+                ? awal.beban.toInt().toString()
+                : awal.beban.toString())
+            : '',
       );
-      _setController = TextEditingController(text: awal.jumlahSet.toString());
-      _repetisiController =
-          TextEditingController(text: awal.jumlahRepetisi.toString());
+      _setController = TextEditingController(
+        text: awal.jumlahSet > 0 ? awal.jumlahSet.toString() : '',
+      );
+      _repetisiController = TextEditingController(
+        text: awal.jumlahRepetisi > 0 ? awal.jumlahRepetisi.toString() : '',
+      );
       _selectedKategori = awal.kategori;
       _catatanController = TextEditingController(text: awal.catatan);
-      _selectedTanggal = DateTime.now(); // Tanggal duplikat default hari ini
+      _selectedTanggal = DateTime.now(); // Tanggal default hari ini
     } else {
       // Inisialisasi data untuk mode tambah biasa
       _namaController = TextEditingController();
@@ -143,7 +148,7 @@ class _FormLatihanPageState extends State<FormLatihanPage> {
   @override
   Widget build(BuildContext context) {
     final isEditMode = widget.latihan != null;
-    final isDuplicateMode = widget.awal != null;
+    final isDuplicateMode = widget.awal != null && widget.awal!.id.isNotEmpty;
 
     final String judulAppBar = isEditMode
         ? 'Ubah Latihan'
