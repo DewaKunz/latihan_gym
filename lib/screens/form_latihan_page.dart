@@ -1,6 +1,9 @@
 import 'package:material_ui/material_ui.dart';
+import '../data/panduan_gerakan.dart';
 import '../models/kategori_otot.dart';
 import '../models/latihan.dart';
+import '../services/latihan_storage.dart';
+import '../theme/app_theme.dart';
 
 // Halaman form untuk menambah, mengubah, atau menduplikasi data latihan
 class FormLatihanPage extends StatefulWidget {
@@ -25,6 +28,10 @@ class _FormLatihanPageState extends State<FormLatihanPage> {
 
   late String _selectedKategori;
   late DateTime _selectedTanggal;
+
+  // Daftar riwayat latihan untuk saran autocomplete dan petunjuk beban terakhir
+  List<Latihan> _riwayatLatihan = [];
+  List<String> _opsiSaran = [];
 
   // Format manual tanggal dd/mm/yyyy tanpa package intl
   String _formatTanggal(DateTime dt) {
@@ -87,6 +94,108 @@ class _FormLatihanPageState extends State<FormLatihanPage> {
 
     _tanggalController =
         TextEditingController(text: _formatTanggal(_selectedTanggal));
+
+    // Siapkan saran awal dari panduan gerakan lalu muat riwayat tersimpan
+    _bangunOpsiSaran();
+    _muatRiwayatLatihan();
+  }
+
+  // Memuat riwayat latihan dari SharedPreferences untuk saran & petunjuk terakhir
+  Future<void> _muatRiwayatLatihan() async {
+    try {
+      final data = await LatihanStorage().loadLatihan();
+      if (!mounted) return;
+      _riwayatLatihan = data;
+      _bangunOpsiSaran();
+    } catch (_) {
+      // Abaikan jika gagal memuat riwayat; saran panduan tetap tersedia
+    }
+  }
+
+  // Menggabungkan nama unik dari riwayat dan panduan (tidak peka huruf besar-kecil)
+  void _bangunOpsiSaran() {
+    final Map<String, String> unikMap = {};
+
+    // Prioritaskan penulisan dari catatan riwayat terbaru
+    final riwayatTerurut = List<Latihan>.from(_riwayatLatihan)
+      ..sort((a, b) => b.tanggal.compareTo(a.tanggal));
+    for (final item in riwayatTerurut) {
+      final key = item.namaLatihan.trim().toLowerCase();
+      if (key.isNotEmpty && !unikMap.containsKey(key)) {
+        unikMap[key] = item.namaLatihan.trim();
+      }
+    }
+
+    // Tambahkan nama gerakan dari panduan gerakan
+    for (final gerakan in daftarPanduanGerakan) {
+      final key = gerakan.nama.trim().toLowerCase();
+      if (key.isNotEmpty && !unikMap.containsKey(key)) {
+        unikMap[key] = gerakan.nama.trim();
+      }
+    }
+
+    final hasil = unikMap.values.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+
+    if (mounted) {
+      setState(() {
+        _opsiSaran = hasil;
+      });
+    } else {
+      _opsiSaran = hasil;
+    }
+  }
+
+  // Mengisi kategori otomatis saat saran dipilih dari panduan atau riwayat
+  void _saatNamaDipilih(String namaDipilih) {
+    final key = namaDipilih.trim().toLowerCase();
+    String? kategoriBaru;
+
+    // Cek di panduan gerakan terlebih dahulu
+    final indeksPanduan = daftarPanduanGerakan.indexWhere(
+      (g) => g.nama.trim().toLowerCase() == key,
+    );
+    if (indeksPanduan != -1) {
+      kategoriBaru = daftarPanduanGerakan[indeksPanduan].kategori;
+    } else {
+      // Jika dari riwayat, ambil kategori dari catatan terakhir dengan nama tersebut
+      final riwayatCocok = _riwayatLatihan
+          .where((item) => item.namaLatihan.trim().toLowerCase() == key)
+          .toList()
+        ..sort((a, b) => b.tanggal.compareTo(a.tanggal));
+      if (riwayatCocok.isNotEmpty) {
+        kategoriBaru = riwayatCocok.first.kategori;
+      }
+    }
+
+    setState(() {
+      _namaController.text = namaDipilih;
+      if (kategoriBaru != null && daftarKategoriOtot.contains(kategoriBaru)) {
+        _selectedKategori = kategoriBaru;
+      }
+    });
+  }
+
+  // Mencari catatan latihan terakhir berdasarkan nama latihan saat ini
+  Latihan? get _latihanTerakhir {
+    final key = _namaController.text.trim().toLowerCase();
+    if (key.isEmpty) return null;
+
+    final cocok = _riwayatLatihan
+        .where((item) => item.namaLatihan.trim().toLowerCase() == key)
+        .toList();
+    if (cocok.isEmpty) return null;
+
+    cocok.sort((a, b) => b.tanggal.compareTo(a.tanggal));
+    return cocok.first;
+  }
+
+  // Format angka beban agar rapi (50 bukan 50.0, sedangkan 52.5 tetap 52.5)
+  String _formatBeban(double beban) {
+    if (beban == beban.roundToDouble()) {
+      return beban.toInt().toString();
+    }
+    return beban.toString();
   }
 
   @override
@@ -149,6 +258,7 @@ class _FormLatihanPageState extends State<FormLatihanPage> {
   Widget build(BuildContext context) {
     final isEditMode = widget.latihan != null;
     final isDuplicateMode = widget.awal != null && widget.awal!.id.isNotEmpty;
+    final latihanTerakhir = _latihanTerakhir;
 
     final String judulAppBar = isEditMode
         ? 'Ubah Latihan'
@@ -167,27 +277,142 @@ class _FormLatihanPageState extends State<FormLatihanPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Field Nama Latihan
-              TextFormField(
-                controller: _namaController,
-                textCapitalization: TextCapitalization.words,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Nama Latihan *',
-                  hintText: 'Misal: Bench Press, Barbell Squat',
-                  prefixIcon: Icon(Icons.fitness_center),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Nama latihan wajib diisi';
+              // Field Nama Latihan dengan Autocomplete bawaan Flutter
+              Autocomplete<String>(
+                initialValue: TextEditingValue(text: _namaController.text),
+                optionsBuilder: (TextEditingValue textEditingValue) {
+                  final query = textEditingValue.text.trim().toLowerCase();
+                  if (query.isEmpty) {
+                    return const Iterable<String>.empty();
                   }
-                  return null;
+                  return _opsiSaran.where(
+                    (opsi) => opsi.toLowerCase().contains(query),
+                  );
+                },
+                onSelected: _saatNamaDipilih,
+                fieldViewBuilder: (
+                  BuildContext context,
+                  TextEditingController fieldTextEditingController,
+                  FocusNode fieldFocusNode,
+                  VoidCallback onFieldSubmitted,
+                ) {
+                  return TextFormField(
+                    controller: fieldTextEditingController,
+                    focusNode: fieldFocusNode,
+                    textCapitalization: TextCapitalization.words,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      labelText: 'Nama Latihan *',
+                      hintText: 'Misal: Bench Press, Barbell Squat',
+                      prefixIcon: Icon(Icons.fitness_center),
+                    ),
+                    onChanged: (value) {
+                      _namaController.text = value;
+                      setState(() {});
+                    },
+                    onFieldSubmitted: (value) => onFieldSubmitted(),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Nama latihan wajib diisi';
+                      }
+                      return null;
+                    },
+                  );
+                },
+                optionsViewBuilder: (
+                  BuildContext context,
+                  AutocompleteOnSelected<String> onSelected,
+                  Iterable<String> options,
+                ) {
+                  return Align(
+                    alignment: Alignment.topLeft,
+                    child: Material(
+                      elevation: 6,
+                      color: AppTheme.surface,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: const BorderSide(color: AppTheme.border),
+                      ),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: 220,
+                          maxWidth: MediaQuery.of(context).size.width - 40,
+                        ),
+                        child: ListView.builder(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          shrinkWrap: true,
+                          itemCount: options.length,
+                          itemBuilder: (BuildContext context, int index) {
+                            final String option = options.elementAt(index);
+                            return InkWell(
+                              onTap: () => onSelected(option),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 12,
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.fitness_center,
+                                      size: 16,
+                                      color: AppTheme.primary,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        option,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 14,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  );
                 },
               ),
+
+              // Petunjuk kecil catatan terakhir bila nama pernah dicatat
+              if (latihanTerakhir != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6, left: 4),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.history,
+                        size: 14,
+                        color: AppTheme.primary,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Terakhir: ${_formatBeban(latihanTerakhir.beban)} kg x ${latihanTerakhir.jumlahSet} x ${latihanTerakhir.jumlahRepetisi}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textSecondary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               const SizedBox(height: 20),
 
               // Dropdown Kategori Otot (Wajib Terpilih)
               DropdownButtonFormField<String>(
+                key: ValueKey(_selectedKategori),
                 initialValue: _selectedKategori,
                 dropdownColor: const Color(0xFF1B1B1E),
                 style: const TextStyle(color: Colors.white, fontSize: 15),
