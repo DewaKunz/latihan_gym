@@ -7,6 +7,29 @@ import '../widgets/dialog_konfirmasi_hapus.dart';
 import 'detail_latihan_page.dart';
 import 'form_latihan_page.dart';
 
+// Kelas abstrak untuk item dalam daftar tampilan (header tanggal atau data latihan)
+abstract class ItemDaftarLatihan {}
+
+// Item header tanggal yang menampilkan tanggal dan total volume pada tanggal tersebut
+class HeaderTanggalItem extends ItemDaftarLatihan {
+  final DateTime tanggal;
+  final String labelTanggal;
+  final double totalVolume;
+
+  HeaderTanggalItem({
+    required this.tanggal,
+    required this.labelTanggal,
+    required this.totalVolume,
+  });
+}
+
+// Item data latihan
+class DataLatihanItem extends ItemDaftarLatihan {
+  final Latihan latihan;
+
+  DataLatihanItem(this.latihan);
+}
+
 // Halaman utama untuk menampilkan daftar riwayat latihan gym dengan tema modern
 class DaftarLatihanPage extends StatefulWidget {
   const DaftarLatihanPage({super.key});
@@ -142,6 +165,65 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
     }
 
     return hasil;
+  }
+
+  // Menghasilkan label tanggal: "Hari ini", "Kemarin", atau format dd/mm/yyyy
+  String _getLabelTanggal(DateTime dt) {
+    final now = DateTime.now();
+    if (_apakahTanggalSama(dt, now)) {
+      return 'Hari ini';
+    }
+    final kemarin = DateTime(now.year, now.month, now.day - 1);
+    if (_apakahTanggalSama(dt, kemarin)) {
+      return 'Kemarin';
+    }
+    return _formatTanggal(dt);
+  }
+
+  // Menghasilkan daftar campuran (header tanggal + data latihan) untuk ListView
+  List<ItemDaftarLatihan> get _daftarCampuran {
+    final List<Latihan> items = _daftarTampil;
+    if (items.isEmpty) return [];
+
+    // Saat urutan = Volume tertinggi atau Nama A-Z, header tidak ditampilkan
+    if (_opsiUrutan != 'terbaru' && _opsiUrutan != 'terlama') {
+      return items.map((l) => DataLatihanItem(l)).toList();
+    }
+
+    // Saat urutan = Terbaru atau Terlama, kelompokkan per tanggal dengan header
+    final List<ItemDaftarLatihan> campuran = [];
+    DateTime? tanggalGrup;
+    List<Latihan> grup = [];
+
+    void flushGrup() {
+      if (grup.isEmpty || tanggalGrup == null) return;
+      final double totalVolume = grup.fold(
+        0.0,
+        (sum, item) => sum + item.volume,
+      );
+      campuran.add(
+        HeaderTanggalItem(
+          tanggal: tanggalGrup,
+          labelTanggal: _getLabelTanggal(tanggalGrup),
+          totalVolume: totalVolume,
+        ),
+      );
+      for (final l in grup) {
+        campuran.add(DataLatihanItem(l));
+      }
+      grup = [];
+    }
+
+    for (final lat in items) {
+      if (tanggalGrup == null || !_apakahTanggalSama(tanggalGrup, lat.tanggal)) {
+        flushGrup();
+        tanggalGrup = lat.tanggal;
+      }
+      grup.add(lat);
+    }
+    flushGrup();
+
+    return campuran;
   }
 
   // Mengecek apakah ada filter yang sedang aktif
@@ -402,6 +484,89 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
     );
   }
 
+  // Widget header tanggal untuk memisahkan kelompok latihan per tanggal
+  Widget _buildHeaderTanggal(HeaderTanggalItem header) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Sisi Kiri: Ikon kalender dan label tanggal ("Hari ini", "Kemarin", atau dd/mm/yyyy)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(
+                  Icons.calendar_today,
+                  size: 13,
+                  color: AppTheme.primary,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                header.labelTanggal,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ],
+          ),
+          // Sisi Kanan: Total volume latihan hari itu
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceLight,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: AppTheme.border,
+                width: 0.8,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Total: ',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  _formatVolume(header.totalVolume),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 3),
+                const Text(
+                  'kg',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // Widget chip filter aktif dengan tombol silang (hapus)
   Widget _buildActiveFilterChip({
     required String label,
@@ -642,6 +807,7 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
     }
 
     final items = _daftarTampil;
+    final campuran = _daftarCampuran;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -924,9 +1090,17 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
                 )
               : ListView.builder(
                   padding: const EdgeInsets.symmetric(vertical: 8),
-                  itemCount: items.length,
+                  itemCount: campuran.length,
                   itemBuilder: (context, index) {
-                    final latihan = items[index];
+                    final item = campuran[index];
+
+                    // Tampilkan widget Header Tanggal
+                    if (item is HeaderTanggalItem) {
+                      return _buildHeaderTanggal(item);
+                    }
+
+                    // Tampilkan widget Data Latihan
+                    final latihan = (item as DataLatihanItem).latihan;
                     final warnaKategori = getWarnaKategori(latihan.kategori);
                     final ikonKategori = getIkonKategori(latihan.kategori);
 
