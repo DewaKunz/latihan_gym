@@ -1,6 +1,8 @@
 import 'package:material_ui/material_ui.dart';
+import '../models/kategori_otot.dart';
 import '../models/latihan.dart';
 import '../theme/app_theme.dart';
+import '../widgets/dialog_konfirmasi_hapus.dart';
 import 'form_latihan_page.dart';
 
 // Halaman detail untuk melihat informasi lengkap sebuah latihan dengan tampilan modern
@@ -95,47 +97,35 @@ class _DetailLatihanPageState extends State<DetailLatihanPage> {
     }
   }
 
-  // Menampilkan dialog konfirmasi hapus sebelum menghapus data
-  void _konfirmasiHapus() {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: AppTheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: AppTheme.border),
-        ),
-        title: const Text(
-          'Konfirmasi Hapus',
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-        ),
-        content: Text(
-          'Apakah Anda yakin ingin menghapus data latihan "${_latihan.namaLatihan}"?',
-          style: const TextStyle(color: AppTheme.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Batal', style: TextStyle(color: AppTheme.textSecondary)),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(dialogContext); // Tutup dialog konfirmasi
-              Navigator.pop(context, {
-                'aksi': 'hapus',
-                'id': _latihan.id,
-              }); // Kembali ke halaman daftar dengan aksi hapus
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.danger,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            ),
-            child: const Text('Hapus'),
-          ),
-        ],
+  // Membuka form dalam mode duplikat (mengisi data latihan awal, tanggal hari ini)
+  Future<void> _bukaFormDuplikat() async {
+    final Latihan? duplikatBaru = await Navigator.push<Latihan>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FormLatihanPage(awal: _latihan),
       ),
     );
+
+    // Jika pengguna menyimpan latihan duplikat, kembalikan ke daftar
+    if (duplikatBaru != null && mounted) {
+      Navigator.pop(context, {
+        'aksi': 'duplikat',
+        'latihan': duplikatBaru,
+      });
+    }
+  }
+
+  // Menampilkan dialog konfirmasi hapus menggunakan fungsi bersama
+  Future<void> _konfirmasiHapus() async {
+    final bool setuju =
+        await tampilkanDialogKonfirmasiHapus(context, _latihan.namaLatihan);
+
+    if (setuju && mounted) {
+      Navigator.pop(context, {
+        'aksi': 'hapus',
+        'id': _latihan.id,
+      });
+    }
   }
 
   // Kembali ke halaman daftar dengan membawa data terupdate jika ada perubahan
@@ -155,10 +145,12 @@ class _DetailLatihanPageState extends State<DetailLatihanPage> {
     required IconData icon,
     required String label,
     required String value,
+    Color? iconColor,
+    Color? valueColor,
   }) {
     return Row(
       children: [
-        Icon(icon, size: 20, color: AppTheme.primary),
+        Icon(icon, size: 20, color: iconColor ?? AppTheme.primary),
         const SizedBox(width: 12),
         Text(
           label,
@@ -172,10 +164,10 @@ class _DetailLatihanPageState extends State<DetailLatihanPage> {
           child: Text(
             value,
             textAlign: TextAlign.end,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
-              color: Colors.white,
+              color: valueColor ?? Colors.white,
             ),
           ),
         ),
@@ -185,6 +177,9 @@ class _DetailLatihanPageState extends State<DetailLatihanPage> {
 
   @override
   Widget build(BuildContext context) {
+    final warnaKategori = getWarnaKategori(_latihan.kategori);
+    final ikonKategori = getIkonKategori(_latihan.kategori);
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
@@ -201,6 +196,11 @@ class _DetailLatihanPageState extends State<DetailLatihanPage> {
             onPressed: _kembali,
           ),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.copy_outlined),
+              tooltip: 'Duplikat Latihan',
+              onPressed: _bukaFormDuplikat,
+            ),
             IconButton(
               icon: const Icon(Icons.edit_outlined),
               tooltip: 'Ubah Latihan',
@@ -219,7 +219,7 @@ class _DetailLatihanPageState extends State<DetailLatihanPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Header Besar: Nama Latihan dan Volume
+              // Header Besar: Nama Latihan, Kategori, dan Volume
               Card(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
@@ -236,13 +236,43 @@ class _DetailLatihanPageState extends State<DetailLatihanPage> {
                           shape: BoxShape.circle,
                           border: Border.all(color: AppTheme.border),
                         ),
-                        child: const Icon(
-                          Icons.fitness_center,
+                        child: Icon(
+                          ikonKategori,
                           size: 36,
-                          color: AppTheme.primary,
+                          color: warnaKategori,
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 14),
+                      // Chip kategori di header
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: warnaKategori.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: warnaKategori.withValues(alpha: 0.5),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(ikonKategori, size: 14, color: warnaKategori),
+                            const SizedBox(width: 6),
+                            Text(
+                              _latihan.kategori,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: warnaKategori,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
                       Text(
                         _latihan.namaLatihan,
                         textAlign: TextAlign.center,
@@ -295,12 +325,20 @@ class _DetailLatihanPageState extends State<DetailLatihanPage> {
               ),
               const SizedBox(height: 16),
 
-              // Kartu Info untuk Beban, Set, Repetisi, dan Tanggal
+              // Kartu Info untuk Beban, Set, Repetisi, Kategori, dan Tanggal
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(20.0),
                   child: Column(
                     children: [
+                      _buildDetailRow(
+                        icon: ikonKategori,
+                        iconColor: warnaKategori,
+                        label: 'Kategori Otot',
+                        value: _latihan.kategori,
+                        valueColor: warnaKategori,
+                      ),
+                      const Divider(color: AppTheme.border, height: 26),
                       _buildDetailRow(
                         icon: Icons.scale_outlined,
                         label: 'Beban',
@@ -328,18 +366,56 @@ class _DetailLatihanPageState extends State<DetailLatihanPage> {
                   ),
                 ),
               ),
+
+              // Bagian Catatan (Jika catatan kosong, sembunyikan bagian ini)
+              if (_latihan.catatan.trim().isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.notes, size: 20, color: AppTheme.primary),
+                            SizedBox(width: 10),
+                            Text(
+                              'Catatan Latihan',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          _latihan.catatan,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: AppTheme.textSecondary,
+                            height: 1.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
 
-              // Tombol Ubah dan Hapus Menonjol
+              // Tombol Aksi: Ubah, Duplikat, dan Hapus
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: _bukaFormUbah,
-                      icon: const Icon(Icons.edit_outlined),
-                      label: const Text('Ubah'),
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      label: const Text('Ubah', style: TextStyle(fontSize: 13)),
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                         side: const BorderSide(
                           color: AppTheme.primary,
                           width: 1.5,
@@ -348,16 +424,32 @@ class _DetailLatihanPageState extends State<DetailLatihanPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 14),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _bukaFormDuplikat,
+                      icon: const Icon(Icons.copy_outlined, size: 18),
+                      label: const Text('Duplikat', style: TextStyle(fontSize: 13)),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        side: const BorderSide(
+                          color: Color(0xFF64B5F6),
+                          width: 1.5,
+                        ),
+                        foregroundColor: const Color(0xFF64B5F6),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: _konfirmasiHapus,
-                      icon: const Icon(Icons.delete_outline),
-                      label: const Text('Hapus'),
+                      icon: const Icon(Icons.delete_outline, size: 18),
+                      label: const Text('Hapus', style: TextStyle(fontSize: 13)),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.danger,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                     ),
                   ),

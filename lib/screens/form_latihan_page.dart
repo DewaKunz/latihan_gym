@@ -1,11 +1,13 @@
 import 'package:material_ui/material_ui.dart';
+import '../models/kategori_otot.dart';
 import '../models/latihan.dart';
 
-// Halaman form untuk menambah atau mengubah data latihan dengan tema gelap modern
+// Halaman form untuk menambah, mengubah, atau menduplikasi data latihan
 class FormLatihanPage extends StatefulWidget {
-  final Latihan? latihan;
+  final Latihan? latihan; // Jika diisi, beroperasi dalam mode ubah (ID tetap)
+  final Latihan? awal; // Jika diisi, mode tambah terisi awal untuk duplikat (ID baru)
 
-  const FormLatihanPage({super.key, this.latihan});
+  const FormLatihanPage({super.key, this.latihan, this.awal});
 
   @override
   State<FormLatihanPage> createState() => _FormLatihanPageState();
@@ -19,7 +21,9 @@ class _FormLatihanPageState extends State<FormLatihanPage> {
   late TextEditingController _setController;
   late TextEditingController _repetisiController;
   late TextEditingController _tanggalController;
+  late TextEditingController _catatanController;
 
+  late String _selectedKategori;
   late DateTime _selectedTanggal;
 
   // Format manual tanggal dd/mm/yyyy tanpa package intl
@@ -35,8 +39,10 @@ class _FormLatihanPageState extends State<FormLatihanPage> {
     super.initState();
 
     final latihan = widget.latihan;
+    final awal = widget.awal;
+
     if (latihan != null) {
-      // Inisialisasi data untuk mode ubah
+      // Inisialisasi data untuk mode ubah (mengisi nilai lama)
       _namaController = TextEditingController(text: latihan.namaLatihan);
       _bebanController = TextEditingController(
         text: latihan.beban % 1 == 0
@@ -46,13 +52,31 @@ class _FormLatihanPageState extends State<FormLatihanPage> {
       _setController = TextEditingController(text: latihan.jumlahSet.toString());
       _repetisiController =
           TextEditingController(text: latihan.jumlahRepetisi.toString());
+      _selectedKategori = latihan.kategori;
+      _catatanController = TextEditingController(text: latihan.catatan);
       _selectedTanggal = latihan.tanggal;
+    } else if (awal != null) {
+      // Inisialisasi data untuk mode duplikat (mengisi nilai latihan awal, tanggal hari ini)
+      _namaController = TextEditingController(text: awal.namaLatihan);
+      _bebanController = TextEditingController(
+        text: awal.beban % 1 == 0
+            ? awal.beban.toInt().toString()
+            : awal.beban.toString(),
+      );
+      _setController = TextEditingController(text: awal.jumlahSet.toString());
+      _repetisiController =
+          TextEditingController(text: awal.jumlahRepetisi.toString());
+      _selectedKategori = awal.kategori;
+      _catatanController = TextEditingController(text: awal.catatan);
+      _selectedTanggal = DateTime.now(); // Tanggal duplikat default hari ini
     } else {
-      // Inisialisasi data untuk mode tambah (default hari ini)
+      // Inisialisasi data untuk mode tambah biasa
       _namaController = TextEditingController();
       _bebanController = TextEditingController();
       _setController = TextEditingController();
       _repetisiController = TextEditingController();
+      _selectedKategori = 'Dada';
+      _catatanController = TextEditingController();
       _selectedTanggal = DateTime.now();
     }
 
@@ -67,6 +91,7 @@ class _FormLatihanPageState extends State<FormLatihanPage> {
     _setController.dispose();
     _repetisiController.dispose();
     _tanggalController.dispose();
+    _catatanController.dispose();
     super.dispose();
   }
 
@@ -97,7 +122,7 @@ class _FormLatihanPageState extends State<FormLatihanPage> {
       final int jumlahRepetisi = int.parse(_repetisiController.text.trim());
 
       final Latihan dataHasil = Latihan(
-        // Mode tambah menggunakan timestamp sebagai ID unik, mode ubah mempertahankan ID lama
+        // Mode tambah dan mode duplikat menggunakan timestamp sebagai ID baru
         id: widget.latihan != null
             ? widget.latihan!.id
             : DateTime.now().millisecondsSinceEpoch.toString(),
@@ -106,6 +131,8 @@ class _FormLatihanPageState extends State<FormLatihanPage> {
         jumlahSet: jumlahSet,
         jumlahRepetisi: jumlahRepetisi,
         tanggal: _selectedTanggal,
+        kategori: _selectedKategori,
+        catatan: _catatanController.text.trim(),
       );
 
       // Kembalikan objek Latihan lewat Navigator.pop
@@ -116,10 +143,15 @@ class _FormLatihanPageState extends State<FormLatihanPage> {
   @override
   Widget build(BuildContext context) {
     final isEditMode = widget.latihan != null;
+    final isDuplicateMode = widget.awal != null;
+
+    final String judulAppBar = isEditMode
+        ? 'Ubah Latihan'
+        : (isDuplicateMode ? 'Duplikat Latihan' : 'Tambah Latihan');
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(isEditMode ? 'Ubah Latihan' : 'Tambah Latihan'),
+        title: Text(judulAppBar),
         centerTitle: true,
       ),
       // SingleChildScrollView mencegah overflow saat keyboard virtual muncul
@@ -143,6 +175,45 @@ class _FormLatihanPageState extends State<FormLatihanPage> {
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
                     return 'Nama latihan wajib diisi';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 20),
+
+              // Dropdown Kategori Otot (Wajib Terpilih)
+              DropdownButtonFormField<String>(
+                initialValue: _selectedKategori,
+                dropdownColor: const Color(0xFF1B1B1E),
+                style: const TextStyle(color: Colors.white, fontSize: 15),
+                decoration: const InputDecoration(
+                  labelText: 'Kategori Otot *',
+                  prefixIcon: Icon(Icons.category),
+                ),
+                items: daftarKategoriOtot.map((kategori) {
+                  final warna = getWarnaKategori(kategori);
+                  final ikon = getIkonKategori(kategori);
+                  return DropdownMenuItem<String>(
+                    value: kategori,
+                    child: Row(
+                      children: [
+                        Icon(ikon, size: 18, color: warna),
+                        const SizedBox(width: 10),
+                        Text(kategori, style: const TextStyle(color: Colors.white)),
+                      ],
+                    ),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() {
+                      _selectedKategori = value;
+                    });
+                  }
+                },
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Kategori otot wajib dipilih';
                   }
                   return null;
                 },
@@ -239,6 +310,21 @@ class _FormLatihanPageState extends State<FormLatihanPage> {
                   labelText: 'Tanggal Latihan *',
                   prefixIcon: Icon(Icons.calendar_today_outlined),
                   suffixIcon: Icon(Icons.arrow_drop_down),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Field Catatan (Opsional, Maks. 200 karakter, boleh beberapa baris)
+              TextFormField(
+                controller: _catatanController,
+                maxLines: 3,
+                minLines: 1,
+                maxLength: 200,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'Catatan (Opsional)',
+                  hintText: 'Misal: Terasa ringan, tambah beban minggu depan',
+                  prefixIcon: Icon(Icons.notes),
                 ),
               ),
               const SizedBox(height: 32),

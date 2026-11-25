@@ -1,7 +1,9 @@
 import 'package:material_ui/material_ui.dart';
+import '../models/kategori_otot.dart';
 import '../models/latihan.dart';
 import '../services/latihan_storage.dart';
 import '../theme/app_theme.dart';
+import '../widgets/dialog_konfirmasi_hapus.dart';
 import 'detail_latihan_page.dart';
 import 'form_latihan_page.dart';
 
@@ -19,8 +21,20 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
   bool _isLoading = true;
   String? _errorMessage;
 
-  // Tanggal yang sedang aktif sebagai filter (null jika menampilkan semua)
+  // Filter Kategori Otot (default: 'Semua')
+  String _filterKategori = 'Semua';
+
+  // Filter Tanggal (satu tanggal atau rentang tanggal)
   DateTime? _filterTanggal;
+  DateTimeRange? _filterRentang;
+
+  // Kontrol dan kata kunci pencarian nama latihan
+  final TextEditingController _searchController = TextEditingController();
+  String _keywordCari = '';
+
+  // Opsi pengurutan daftar (default: 'terbaru')
+  // Pilihan: 'terbaru', 'terlama', 'volume', 'nama'
+  String _opsiUrutan = 'terbaru';
 
   @override
   void initState() {
@@ -28,7 +42,13 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
     _muatData();
   }
 
-  // Memuat data dari SharedPreferences dan mengurutkan berdasarkan tanggal terbaru
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  // Memuat data dari SharedPreferences
   Future<void> _muatData() async {
     setState(() {
       _isLoading = true;
@@ -38,7 +58,7 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
     try {
       final List<Latihan> data = await _storage.loadLatihan();
 
-      // Mengurutkan latihan dari tanggal terbaru
+      // Urutkan data awal berdasarkan tanggal terbaru
       data.sort((a, b) => b.tanggal.compareTo(a.tanggal));
 
       setState(() {
@@ -58,18 +78,81 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
     return d1.year == d2.year && d1.month == d2.month && d1.day == d2.day;
   }
 
-  // Mengambil daftar latihan yang tampil (disaring jika filter aktif)
+  // Mengambil daftar latihan yang tampil setelah disaring (kategori, tanggal, pencarian)
+  // serta diurutkan sesuai opsi yang dipilih
   List<Latihan> get _daftarTampil {
-    if (_filterTanggal == null) {
-      return _daftarLatihan;
+    // 1. Salin list master agar tidak mengubah data asli
+    List<Latihan> hasil = List.from(_daftarLatihan);
+
+    // 2. Filter Kategori Otot
+    if (_filterKategori != 'Semua') {
+      hasil = hasil.where((item) => item.kategori == _filterKategori).toList();
     }
-    return _daftarLatihan
-        .where((item) => _apakahTanggalSama(item.tanggal, _filterTanggal!))
-        .toList();
+
+    // 3. Filter Tanggal (Satu Tanggal atau Rentang Tanggal)
+    if (_filterTanggal != null) {
+      hasil = hasil
+          .where((item) => _apakahTanggalSama(item.tanggal, _filterTanggal!))
+          .toList();
+    } else if (_filterRentang != null) {
+      final start = DateTime(
+        _filterRentang!.start.year,
+        _filterRentang!.start.month,
+        _filterRentang!.start.day,
+      );
+      final end = DateTime(
+        _filterRentang!.end.year,
+        _filterRentang!.end.month,
+        _filterRentang!.end.day,
+        23,
+        59,
+        59,
+        999,
+      );
+      hasil = hasil
+          .where((item) =>
+              !item.tanggal.isBefore(start) && !item.tanggal.isAfter(end))
+          .toList();
+    }
+
+    // 4. Filter Pencarian Nama Latihan (tidak peka huruf besar-kecil)
+    if (_keywordCari.isNotEmpty) {
+      hasil = hasil
+          .where((item) =>
+              item.namaLatihan.toLowerCase().contains(_keywordCari))
+          .toList();
+    }
+
+    // 5. Pengurutan Tampilan
+    switch (_opsiUrutan) {
+      case 'terlama':
+        hasil.sort((a, b) => a.tanggal.compareTo(b.tanggal));
+        break;
+      case 'volume':
+        hasil.sort((a, b) => b.volume.compareTo(a.volume));
+        break;
+      case 'nama':
+        hasil.sort((a, b) =>
+            a.namaLatihan.toLowerCase().compareTo(b.namaLatihan.toLowerCase()));
+        break;
+      case 'terbaru':
+      default:
+        hasil.sort((a, b) => b.tanggal.compareTo(a.tanggal));
+        break;
+    }
+
+    return hasil;
   }
 
-  // Membuka dialog kalender untuk memilih tanggal filter
-  Future<void> _pilihFilterTanggal() async {
+  // Mengecek apakah ada filter yang sedang aktif
+  bool get _adaFilterAktif =>
+      _filterKategori != 'Semua' ||
+      _filterTanggal != null ||
+      _filterRentang != null ||
+      _keywordCari.isNotEmpty;
+
+  // Membuka dialog kalender untuk memilih satu tanggal
+  Future<void> _pilihSatuTanggal() async {
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: _filterTanggal ?? DateTime.now(),
@@ -80,15 +163,80 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
     if (picked != null) {
       setState(() {
         _filterTanggal = picked;
+        _filterRentang = null; // Menghapus filter rentang jika ada
       });
     }
   }
 
-  // Menghapus filter dan kembali menampilkan semua data latihan
-  void _hapusFilter() {
+  // Membuka dialog kalender untuk memilih rentang tanggal
+  Future<void> _pilihRentangTanggal() async {
+    final DateTimeRange? picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      initialDateRange: _filterRentang ??
+          DateTimeRange(
+            start: DateTime.now().subtract(const Duration(days: 7)),
+            end: DateTime.now(),
+          ),
+    );
+
+    if (picked != null) {
+      setState(() {
+        _filterRentang = picked;
+        _filterTanggal = null; // Menghapus filter satu tanggal jika ada
+      });
+    }
+  }
+
+  // Mereset seluruh filter dan kata kunci pencarian
+  void _hapusSemuaFilter() {
     setState(() {
+      _filterKategori = 'Semua';
       _filterTanggal = null;
+      _filterRentang = null;
+      _searchController.clear();
+      _keywordCari = '';
     });
+  }
+
+  // Menghapus latihan dari daftar dengan opsi Urungkan (Undo) lewat SnackBar
+  Future<void> _hapusLatihanDenganUndo(Latihan latihan) async {
+    final int indexAsli =
+        _daftarLatihan.indexWhere((item) => item.id == latihan.id);
+    if (indexAsli == -1) return;
+
+    // Hapus dari data lokal dan simpan ke SharedPreferences
+    setState(() {
+      _daftarLatihan.removeAt(indexAsli);
+    });
+    await _storage.saveLatihan(_daftarLatihan);
+
+    if (!mounted) return;
+
+    // Tampilkan SnackBar dengan tombol aksi "Urungkan"
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Latihan "${latihan.namaLatihan}" dihapus'),
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(
+          label: 'Urungkan',
+          textColor: AppTheme.primary,
+          onPressed: () async {
+            // Mengembalikan item ke posisi semula
+            setState(() {
+              if (indexAsli <= _daftarLatihan.length) {
+                _daftarLatihan.insert(indexAsli, latihan);
+              } else {
+                _daftarLatihan.add(latihan);
+              }
+            });
+            await _storage.saveLatihan(_daftarLatihan);
+          },
+        ),
+      ),
+    );
   }
 
   // Membuka form tambah latihan lewat Navigator.push
@@ -130,21 +278,29 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
       ),
     );
 
-    // Tangani aksi dari halaman detail (ubah atau hapus) pada data asli
+    // Tangani aksi dari halaman detail (ubah, hapus, atau duplikat)
     if (hasil != null) {
       final aksi = hasil['aksi'] as String?;
 
       if (aksi == 'hapus') {
         final String id = hasil['id'] as String;
+        final itemDihapus = _daftarLatihan.firstWhere(
+          (item) => item.id == id,
+          orElse: () => latihan,
+        );
+        await _hapusLatihanDenganUndo(itemDihapus);
+      } else if (aksi == 'duplikat') {
+        final Latihan latihanBaru = hasil['latihan'] as Latihan;
         setState(() {
-          _daftarLatihan.removeWhere((item) => item.id == id);
+          _daftarLatihan.add(latihanBaru);
+          _daftarLatihan.sort((a, b) => b.tanggal.compareTo(a.tanggal));
         });
         await _storage.saveLatihan(_daftarLatihan);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Latihan berhasil dihapus'),
+              content: Text('Latihan berhasil diduplikasi'),
               duration: Duration(seconds: 2),
             ),
           );
@@ -246,22 +402,166 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
     );
   }
 
+  // Widget chip filter aktif dengan tombol silang (hapus)
+  Widget _buildActiveFilterChip({
+    required String label,
+    required VoidCallback onDeleted,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: AppTheme.primary.withValues(alpha: 0.6),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.filter_alt, size: 14, color: AppTheme.primary),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(width: 6),
+          InkWell(
+            onTap: onDeleted,
+            borderRadius: BorderRadius.circular(12),
+            child: const Padding(
+              padding: EdgeInsets.all(2.0),
+              child: Icon(
+                Icons.close,
+                size: 14,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Item menu pada popup pilihan urutan
+  PopupMenuItem<String> _buildPopupMenuItem({
+    required String value,
+    required String label,
+    required IconData icon,
+  }) {
+    final bool isSelected = _opsiUrutan == value;
+    return PopupMenuItem<String>(
+      value: value,
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            size: 18,
+            color: isSelected ? AppTheme.primary : AppTheme.textSecondary,
+          ),
+          const SizedBox(width: 12),
+          Text(
+            label,
+            style: TextStyle(
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              color: isSelected ? AppTheme.primary : Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final bool dateFilterActive =
+        _filterTanggal != null || _filterRentang != null;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Pencatat Latihan Gym'),
         centerTitle: true,
         actions: [
-          IconButton(
+          // Menu Filter Tanggal dengan Pilihan "Satu Tanggal" dan "Rentang Tanggal"
+          PopupMenuButton<String>(
             icon: Icon(
-              _filterTanggal != null
+              dateFilterActive
                   ? Icons.filter_alt
                   : Icons.filter_alt_outlined,
-              color: _filterTanggal != null ? AppTheme.primary : null,
+              color: dateFilterActive ? AppTheme.primary : null,
             ),
             tooltip: 'Filter Tanggal',
-            onPressed: _pilihFilterTanggal,
+            color: AppTheme.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: const BorderSide(color: AppTheme.border),
+            ),
+            onSelected: (String value) {
+              if (value == 'satu') {
+                _pilihSatuTanggal();
+              } else if (value == 'rentang') {
+                _pilihRentangTanggal();
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem<String>(
+                value: 'satu',
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.calendar_today,
+                      size: 18,
+                      color: _filterTanggal != null
+                          ? AppTheme.primary
+                          : AppTheme.textSecondary,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Satu tanggal',
+                      style: TextStyle(
+                        fontWeight: _filterTanggal != null
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                        color: _filterTanggal != null
+                            ? AppTheme.primary
+                            : Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: 'rentang',
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.date_range,
+                      size: 18,
+                      color: _filterRentang != null
+                          ? AppTheme.primary
+                          : AppTheme.textSecondary,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Rentang tanggal',
+                      style: TextStyle(
+                        fontWeight: _filterRentang != null
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                        color: _filterRentang != null
+                            ? AppTheme.primary
+                            : Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -300,7 +600,7 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
       );
     }
 
-    // Tampilan kosong jika data penyimpanan belum ada
+    // Tampilan jika data penyimpanan master memang belum ada sama sekali
     if (_daftarLatihan.isEmpty) {
       return Center(
         child: Column(
@@ -346,52 +646,240 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Indikator filter tanggal aktif ditampilkan rapi di atas daftar
-        if (_filterTanggal != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppTheme.surface,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: AppTheme.primary.withValues(alpha: 0.6),
-                  width: 1,
+        // 1. Bar Kontrol: Kolom Cari + Tombol Pengurutan (Sort)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+          child: Row(
+            children: [
+              // Kolom Cari (TextField)
+              Expanded(
+                child: TextField(
+                  controller: _searchController,
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  onChanged: (value) {
+                    setState(() {
+                      _keywordCari = value.trim().toLowerCase();
+                    });
+                  },
+                  decoration: InputDecoration(
+                    hintText: 'Cari nama latihan...',
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    suffixIcon: _keywordCari.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 18),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {
+                                _keywordCari = '';
+                              });
+                            },
+                          )
+                        : null,
+                  ),
                 ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.filter_alt, size: 15, color: AppTheme.primary),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Tanggal: ${_formatTanggal(_filterTanggal!)}',
-                    style: const TextStyle(
+              const SizedBox(width: 10),
+
+              // Pilihan Urutan (PopupMenuButton)
+              Container(
+                decoration: BoxDecoration(
+                  color: AppTheme.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppTheme.border),
+                ),
+                child: PopupMenuButton<String>(
+                  icon: const Icon(Icons.sort, color: AppTheme.primary),
+                  tooltip: 'Urutkan Daftar',
+                  color: AppTheme.surface,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: const BorderSide(color: AppTheme.border),
+                  ),
+                  onSelected: (String value) {
+                    setState(() {
+                      _opsiUrutan = value;
+                    });
+                  },
+                  itemBuilder: (context) => [
+                    _buildPopupMenuItem(
+                      value: 'terbaru',
+                      label: 'Terbaru',
+                      icon: Icons.schedule,
+                    ),
+                    _buildPopupMenuItem(
+                      value: 'terlama',
+                      label: 'Terlama',
+                      icon: Icons.history,
+                    ),
+                    _buildPopupMenuItem(
+                      value: 'volume',
+                      label: 'Volume tertinggi',
+                      icon: Icons.trending_up,
+                    ),
+                    _buildPopupMenuItem(
+                      value: 'nama',
+                      label: 'Nama A-Z',
+                      icon: Icons.sort_by_alpha,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // 2. Baris ChoiceChip Horizontal untuk Filter Kategori Otot
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          child: Row(
+            children: [
+              // Chip "Semua"
+              ChoiceChip(
+                label: const Text('Semua'),
+                selected: _filterKategori == 'Semua',
+                onSelected: (selected) {
+                  setState(() {
+                    _filterKategori = 'Semua';
+                  });
+                },
+                backgroundColor: AppTheme.surface,
+                selectedColor: AppTheme.primary.withValues(alpha: 0.25),
+                side: BorderSide(
+                  color: _filterKategori == 'Semua'
+                      ? AppTheme.primary
+                      : AppTheme.border,
+                ),
+                labelStyle: TextStyle(
+                  color: _filterKategori == 'Semua'
+                      ? AppTheme.primary
+                      : AppTheme.textSecondary,
+                  fontWeight: _filterKategori == 'Semua'
+                      ? FontWeight.bold
+                      : FontWeight.w500,
+                  fontSize: 13,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+              const SizedBox(width: 8),
+
+              // Chip untuk Setiap Kategori Otot
+              ...daftarKategoriOtot.map((kategori) {
+                final isSelected = _filterKategori == kategori;
+                final warna = getWarnaKategori(kategori);
+                final ikon = getIkonKategori(kategori);
+
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: ChoiceChip(
+                    avatar: Icon(
+                      ikon,
+                      size: 15,
+                      color: isSelected ? warna : AppTheme.textSecondary,
+                    ),
+                    label: Text(kategori),
+                    selected: isSelected,
+                    onSelected: (selected) {
+                      setState(() {
+                        _filterKategori = selected ? kategori : 'Semua';
+                      });
+                    },
+                    backgroundColor: AppTheme.surface,
+                    selectedColor: warna.withValues(alpha: 0.25),
+                    side: BorderSide(
+                      color: isSelected ? warna : AppTheme.border,
+                    ),
+                    labelStyle: TextStyle(
+                      color: isSelected ? warna : AppTheme.textSecondary,
+                      fontWeight:
+                          isSelected ? FontWeight.bold : FontWeight.w500,
                       fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  InkWell(
-                    onTap: _hapusFilter,
-                    borderRadius: BorderRadius.circular(12),
-                    child: const Padding(
-                      padding: EdgeInsets.all(2.0),
-                      child: Icon(
-                        Icons.close,
-                        size: 16,
-                        color: AppTheme.textSecondary,
+                );
+              }),
+            ],
+          ),
+        ),
+
+        // 3. Chip Filter Aktif dan Tombol "Hapus semua filter"
+        if (_adaFilterAktif)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                if (_filterKategori != 'Semua')
+                  _buildActiveFilterChip(
+                    label: 'Kategori: $_filterKategori',
+                    onDeleted: () => setState(() => _filterKategori = 'Semua'),
+                  ),
+                if (_filterTanggal != null)
+                  _buildActiveFilterChip(
+                    label: 'Tanggal: ${_formatTanggal(_filterTanggal!)}',
+                    onDeleted: () => setState(() => _filterTanggal = null),
+                  ),
+                if (_filterRentang != null)
+                  _buildActiveFilterChip(
+                    label:
+                        'Tanggal: ${_formatTanggal(_filterRentang!.start)} - ${_formatTanggal(_filterRentang!.end)}',
+                    onDeleted: () => setState(() => _filterRentang = null),
+                  ),
+                if (_keywordCari.isNotEmpty)
+                  _buildActiveFilterChip(
+                    label: 'Cari: "$_keywordCari"',
+                    onDeleted: () {
+                      _searchController.clear();
+                      setState(() => _keywordCari = '');
+                    },
+                  ),
+                // Tombol "Hapus semua filter"
+                InkWell(
+                  onTap: _hapusSemuaFilter,
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: AppTheme.danger.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: AppTheme.danger.withValues(alpha: 0.5),
                       ),
                     ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.clear_all, size: 14, color: AppTheme.danger),
+                        SizedBox(width: 4),
+                        Text(
+                          'Hapus semua filter',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.danger,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
 
-        // Daftar latihan atau pesan jika tidak ada data pada tanggal filter
+        // 4. Daftar Latihan atau Pesan "Tidak ada hasil" jika filter tidak cocok
         Expanded(
           child: items.isEmpty
               ? Center(
@@ -399,25 +887,35 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
-                        Icons.event_busy,
+                        Icons.search_off,
                         size: 56,
                         color: AppTheme.textSecondary.withValues(alpha: 0.5),
                       ),
                       const SizedBox(height: 14),
                       const Text(
-                        'Tidak ada latihan pada tanggal ini',
+                        'Tidak ada hasil',
                         style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Tidak ada latihan yang cocok dengan filter atau pencarian saat ini',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 14,
                           color: AppTheme.textSecondary,
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 14),
                       TextButton.icon(
-                        onPressed: _hapusFilter,
-                        icon: const Icon(Icons.clear, color: AppTheme.primary),
+                        onPressed: _hapusSemuaFilter,
+                        icon:
+                            const Icon(Icons.refresh, color: AppTheme.primary),
                         label: const Text(
-                          'Tampilkan Semua Latihan',
+                          'Hapus Semua Filter',
                           style: TextStyle(color: AppTheme.primary),
                         ),
                       ),
@@ -429,99 +927,191 @@ class _DaftarLatihanPageState extends State<DaftarLatihanPage> {
                   itemCount: items.length,
                   itemBuilder: (context, index) {
                     final latihan = items[index];
-                    return Card(
-                      margin: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 7,
+                    final warnaKategori = getWarnaKategori(latihan.kategori);
+                    final ikonKategori = getIkonKategori(latihan.kategori);
+
+                    // Setiap item dibungkus Dismissible (geser ke kiri untuk hapus)
+                    return Dismissible(
+                      key: Key(latihan.id),
+                      direction: DismissDirection.endToStart,
+                      confirmDismiss: (direction) async {
+                        // Memakai ulang dialog konfirmasi hapus yang sama
+                        return await tampilkanDialogKonfirmasiHapus(
+                          context,
+                          latihan.namaLatihan,
+                        );
+                      },
+                      onDismissed: (direction) {
+                        _hapusLatihanDenganUndo(latihan);
+                      },
+                      background: Container(
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 7,
+                        ),
+                        padding: const EdgeInsets.only(right: 20),
+                        decoration: BoxDecoration(
+                          color: AppTheme.danger,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        alignment: Alignment.centerRight,
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.delete_outline,
+                                color: Colors.white, size: 24),
+                            SizedBox(width: 8),
+                            Text(
+                              'Hapus',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(16),
-                        onTap: () => _bukaDetail(latihan),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Baris Atas: Nama Latihan (kiri) & Volume Menonjol (kanan)
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      latihan.namaLatihan,
-                                      style: const TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                        letterSpacing: 0.2,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      const Text(
-                                        'VOLUME',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w700,
-                                          letterSpacing: 0.8,
-                                          color: AppTheme.primary,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
+                      child: Card(
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 7,
+                        ),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () => _bukaDetail(latihan),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Baris Atas: Chip Kategori, Nama Latihan & Volume Menonjol
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: Column(
                                         crossAxisAlignment:
-                                            CrossAxisAlignment.baseline,
-                                        textBaseline: TextBaseline.alphabetic,
+                                            CrossAxisAlignment.start,
                                         children: [
-                                          Text(
-                                            _formatVolume(latihan.volume),
-                                            style: const TextStyle(
-                                              fontSize: 20,
-                                              fontWeight: FontWeight.w800,
-                                              color: Colors.white,
+                                          // Chip kategori berwarna
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 3,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: warnaKategori.withValues(
+                                                alpha: 0.15,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                              border: Border.all(
+                                                color: warnaKategori.withValues(
+                                                  alpha: 0.5,
+                                                ),
+                                                width: 0.8,
+                                              ),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  ikonKategori,
+                                                  size: 12,
+                                                  color: warnaKategori,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  latihan.kategori,
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: warnaKategori,
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ),
-                                          const SizedBox(width: 3),
-                                          const Text(
-                                            'kg',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
-                                              color: AppTheme.textSecondary,
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            latihan.namaLatihan,
+                                            style: const TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                              letterSpacing: 0.2,
                                             ),
                                           ),
                                         ],
                                       ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 14),
-                              // Baris Bawah: Chip kecil untuk beban, set x repetisi, dan tanggal
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 6,
-                                children: [
-                                  _buildMiniChip(
-                                    icon: Icons.scale_outlined,
-                                    label: '${_formatBeban(latihan.beban)} kg',
-                                  ),
-                                  _buildMiniChip(
-                                    icon: Icons.repeat,
-                                    label:
-                                        '${latihan.jumlahSet} set x ${latihan.jumlahRepetisi} reps',
-                                  ),
-                                  _buildMiniChip(
-                                    icon: Icons.calendar_today_outlined,
-                                    label: _formatTanggal(latihan.tanggal),
-                                  ),
-                                ],
-                              ),
-                            ],
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        const Text(
+                                          'VOLUME',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                            letterSpacing: 0.8,
+                                            color: AppTheme.primary,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.baseline,
+                                          textBaseline: TextBaseline.alphabetic,
+                                          children: [
+                                            Text(
+                                              _formatVolume(latihan.volume),
+                                              style: const TextStyle(
+                                                fontSize: 20,
+                                                fontWeight: FontWeight.w800,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 3),
+                                            const Text(
+                                              'kg',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                                color: AppTheme.textSecondary,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 14),
+                                // Baris Bawah: Chip kecil untuk beban, set x repetisi, dan tanggal
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 6,
+                                  children: [
+                                    _buildMiniChip(
+                                      icon: Icons.scale_outlined,
+                                      label: '${_formatBeban(latihan.beban)} kg',
+                                    ),
+                                    _buildMiniChip(
+                                      icon: Icons.repeat,
+                                      label:
+                                          '${latihan.jumlahSet} set x ${latihan.jumlahRepetisi} reps',
+                                    ),
+                                    _buildMiniChip(
+                                      icon: Icons.calendar_today_outlined,
+                                      label: _formatTanggal(latihan.tanggal),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),

@@ -6,6 +6,8 @@ class Latihan {
   final int jumlahSet;
   final int jumlahRepetisi;
   final DateTime tanggal;
+  final String kategori; // Kategori otot (Dada, Punggung, Kaki, dll)
+  final String catatan; // Catatan tambahan untuk sesi latihan
 
   Latihan({
     required this.id,
@@ -14,6 +16,8 @@ class Latihan {
     required this.jumlahSet,
     required this.jumlahRepetisi,
     required this.tanggal,
+    this.kategori = 'Lainnya',
+    this.catatan = '',
   });
 
   // Getter untuk menghitung total volume latihan (beban x set x repetisi)
@@ -29,6 +33,8 @@ class Latihan {
       'jumlahSet': jumlahSet,
       'jumlahRepetisi': jumlahRepetisi,
       'tanggal': tanggal.toIso8601String(),
+      'kategori': kategori,
+      'catatan': catatan,
     };
   }
 
@@ -44,6 +50,8 @@ class Latihan {
       tanggal: json['tanggal'] != null
           ? DateTime.tryParse(json['tanggal'] as String) ?? DateTime.now()
           : DateTime.now(),
+      kategori: json['kategori'] as String? ?? 'Lainnya',
+      catatan: json['catatan'] as String? ?? '',
     );
   }
 
@@ -55,6 +63,8 @@ class Latihan {
     int? jumlahSet,
     int? jumlahRepetisi,
     DateTime? tanggal,
+    String? kategori,
+    String? catatan,
   }) {
     return Latihan(
       id: id ?? this.id,
@@ -63,6 +73,8 @@ class Latihan {
       jumlahSet: jumlahSet ?? this.jumlahSet,
       jumlahRepetisi: jumlahRepetisi ?? this.jumlahRepetisi,
       tanggal: tanggal ?? this.tanggal,
+      kategori: kategori ?? this.kategori,
+      catatan: catatan ?? this.catatan,
     );
   }
 }
